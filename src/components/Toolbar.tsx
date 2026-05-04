@@ -1,4 +1,4 @@
-import { Settings, Globe } from 'lucide-react';
+import { Settings, Globe, Clock } from 'lucide-react';
 import { useState } from 'react';
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   onScan: () => void;
   scanning: boolean;
   onOpenSettings: () => void;
+  urlHistory: string[];
+  onSelectHistory: (url: string) => void;
 }
 
 function isValidUrl(val: string): boolean {
@@ -16,13 +18,15 @@ function isValidUrl(val: string): boolean {
   return v.includes('.');
 }
 
-export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpenSettings }: Props) {
+export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpenSettings, urlHistory, onSelectHistory }: Props) {
   const [focused, setFocused] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const invalid = urlInput.length > 0 && !isValidUrl(urlInput);
   const canScan = isValidUrl(urlInput) && !scanning;
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && canScan) onScan();
+    if (e.key === 'Enter' && canScan) { onScan(); setShowHistory(false); }
+    if (e.key === 'Escape') setShowHistory(false);
   }
 
   return (
@@ -48,8 +52,8 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
           value={urlInput}
           onChange={(e) => onUrlChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={() => { setFocused(true); setShowHistory(true); }}
+          onBlur={() => { setFocused(false); setTimeout(() => setShowHistory(false), 150); }}
           placeholder="https://example.com"
           spellCheck={false}
           style={{
@@ -71,6 +75,45 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
             fontSize: 11, color: '#f44747', pointerEvents: 'none',
           }}>
             Invalid URL
+          </div>
+        )}
+        {showHistory && urlHistory.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 2,
+            backgroundColor: '#252526',
+            border: '1px solid #3c3c3c',
+            borderRadius: 2,
+            zIndex: 200,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+          }}>
+            {urlHistory.map((item, index) => (
+              <div
+                key={index}
+                onMouseDown={(e) => { e.preventDefault(); onSelectHistory(item); setShowHistory(false); }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = '#2a2d2e';
+                  (e.currentTarget as HTMLDivElement).style.color = '#cccccc';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+                  (e.currentTarget as HTMLDivElement).style.color = '#9e9e9e';
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '5px 8px',
+                  fontSize: 12,
+                  color: '#9e9e9e',
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                  transition: 'all 0.1s',
+                }}
+              >
+                <Clock size={12} color="#555" style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

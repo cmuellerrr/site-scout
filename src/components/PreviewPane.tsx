@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, ShieldOff, Monitor } from 'lucide-react';
+import { ExternalLink, ShieldOff, Monitor, RefreshCw } from 'lucide-react';
 import type { FrameableStatus } from '../types';
 
 interface Props {
@@ -19,10 +19,22 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
   const contentRef = useRef<HTMLDivElement>(null);
   const [iframeScale, setIframeScale] = useState(1);
 
-  // Reset state when URL changes
+  // Screenshot state
+  const [screenshotSrc, setScreenshotSrc] = useState<string | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const screenshotCacheRef = useRef<Map<string, string>>(new Map());
+  const screenshotAbortRef = useRef<AbortController | null>(null);
+
+  // Reset state when URL changes — abort any in-flight screenshot request
   useEffect(() => {
+    screenshotAbortRef.current?.abort();
+    screenshotAbortRef.current = null;
     setIframeLoaded(false);
     setIframeStuck(false);
+    setScreenshotSrc(null);
+    setScreenshotError(null);
+    setScreenshotLoading(false);
     if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
   }, [url]);
 
@@ -36,7 +48,6 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
     };
   }, [frameableStatus, iframeLoaded]);
 
-  // Re-run when showIframe changes so the ref is populated when the div mounts
   const showIframe = frameableStatus === 'yes' && !iframeStuck;
 
   useEffect(() => {
@@ -51,18 +62,60 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
   }, [showIframe]);
 
   const handleIframeLoad = useCallback(() => {
-    // Check if iframe navigated to about:blank (frame-busting)
     try {
       const loc = iframeRef.current?.contentWindow?.location.href;
-      if (loc === 'about:blank') return; // busted
-    } catch { /* cross-origin, that's fine */ }
+      if (loc === 'about:blank') return;
+    } catch { /* cross-origin, fine */ }
     setIframeLoaded(true);
     setIframeStuck(false);
     if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
   }, []);
 
+  const captureScreenshot = useCallback(async (targetUrl: string) => {
+    const cached = screenshotCacheRef.current.get(targetUrl);
+    if (cached) {
+      setScreenshotSrc(cached);
+      return;
+    }
+
+    // Cancel any previous in-flight request and start a fresh one
+    screenshotAbortRef.current?.abort();
+    const controller = new AbortController();
+    screenshotAbortRef.current = controller;
+
+    setScreenshotLoading(true);
+    setScreenshotError(null);
+    setScreenshotSrc(null);
+
+    try {
+      const res = await fetch(`/api/screenshot?url=${encodeURIComponent(targetUrl)}&mobile=false`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      screenshotCacheRef.current.set(targetUrl, objectUrl);
+      setScreenshotSrc(objectUrl);
+    } catch (err) {
+      if ((err as { name?: string }).name === 'AbortError') return; // user navigated away
+      setScreenshotError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScreenshotLoading(false);
+    }
+  }, []);
+
   const showBlocked = frameableStatus === 'no' || iframeStuck;
   const showChecking = frameableStatus === 'checking';
+
+  // Trigger screenshot capture whenever the pane is in blocked state with a URL
+  useEffect(() => {
+    if (showBlocked && url) {
+      captureScreenshot(url);
+    }
+  }, [showBlocked, url, captureScreenshot]);
 
   if (!url) {
     return (
@@ -94,13 +147,28 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
           </span>
         )}
 
-        {showBlocked && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#cca700' }}>
-            <ShieldOff size={11} /> blocked
-          </span>
-        )}
-
         <div style={{ flex: 1 }} />
+
+        {/* Refresh screenshot button — only shown after a successful capture */}
+        {showBlocked && screenshotSrc && (
+          <button
+            onClick={() => {
+              if (url) {
+                screenshotCacheRef.current.delete(url);
+                captureScreenshot(url);
+              }
+            }}
+            title="Recapture screenshot"
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              color: '#9e9e9e', display: 'flex', alignItems: 'center',
+            }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#cccccc')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e')}
+          >
+            <RefreshCw size={12} />
+          </button>
+        )}
 
         {/* Block popups toggle */}
         <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11, color: '#9e9e9e' }}>
@@ -143,7 +211,6 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
         {showIframe && (
           <div style={{ position: 'absolute', inset: 0, padding: 50, backgroundColor: '#141414', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div ref={contentRef} style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-              {/* Wrapper div scaled to fit — applying transform to the iframe itself doesn't clip correctly */}
               <div style={{
                 position: 'absolute', top: 0, left: 0,
                 width: DESKTOP_W,
@@ -176,32 +243,64 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
           </div>
         )}
 
-        {/* Blocked */}
+        {/* Blocked — screenshot fallback */}
         {showBlocked && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 10,
-            color: '#9e9e9e',
-          }}>
-            <ShieldOff size={28} color="#3c3c3c" />
-            <div style={{ fontSize: 12, textAlign: 'center' }}>
-              <div style={{ marginBottom: 4 }}>
-                {iframeStuck ? 'Preview unavailable' : 'Preview blocked by site'}
+          <div style={{ position: 'absolute', inset: 0, padding: 50, backgroundColor: '#141414', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* Show loading whenever we don't yet have a result — covers the brief gap
+                between URL change resetting state and captureScreenshot setting loading=true */}
+            {(screenshotLoading || (!screenshotSrc && !screenshotError)) && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}>
+                <Spinner />
+                <div style={{ fontSize: 11, color: '#6b6b6b', textAlign: 'center' }}>
+                  Live preview blocked, capturing screenshot…
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: '#6b6b6b' }}>Screenshots will still work</div>
-            </div>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5, fontSize: 11,
-                color: '#569cd6', textDecoration: 'none', border: '1px solid #3c3c3c',
-                borderRadius: 2, padding: '3px 8px',
-              }}
-            >
-              <ExternalLink size={11} /> Open in browser
-            </a>
+            )}
+
+            {screenshotError && !screenshotLoading && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 10, color: '#9e9e9e',
+              }}>
+                <ShieldOff size={28} color="#3c3c3c" />
+                <div style={{ fontSize: 11, color: '#cc4444', textAlign: 'center', maxWidth: 240 }}>
+                  {screenshotError}
+                </div>
+                <button
+                  onClick={() => {
+                    screenshotCacheRef.current.delete(url);
+                    captureScreenshot(url);
+                  }}
+                  style={{
+                    fontSize: 11, color: '#569cd6', background: 'none', border: '1px solid #3c3c3c',
+                    borderRadius: 2, padding: '3px 8px', cursor: 'pointer',
+                  }}
+                >
+                  Retry
+                </button>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, fontSize: 11,
+                    color: '#569cd6', textDecoration: 'none', border: '1px solid #3c3c3c',
+                    borderRadius: 2, padding: '3px 8px',
+                  }}
+                >
+                  <ExternalLink size={11} /> Open in browser
+                </a>
+              </div>
+            )}
+
+            {screenshotSrc && !screenshotLoading && (
+              <div style={{ flex: 1, overflowY: 'auto', borderRadius: 2 }}>
+                <img src={screenshotSrc} style={{ width: '100%', display: 'block' }} alt="Screenshot" />
+              </div>
+            )}
           </div>
         )}
 
@@ -230,7 +329,6 @@ function Spinner() {
   );
 }
 
-// Inject the spin keyframe once
 if (typeof document !== 'undefined' && !document.getElementById('scout-spin-kf')) {
   const style = document.createElement('style');
   style.id = 'scout-spin-kf';

@@ -14,6 +14,7 @@ import ScreenshotModal from './modals/ScreenshotModal';
 import VisualSitemapModal from './modals/VisualSitemapModal';
 
 const DEFAULT_SETTINGS: AppSettings = { depth: 3, filterLocales: true };
+const MAX_HISTORY = 8;
 
 function loadSettings(): AppSettings {
   try {
@@ -24,6 +25,17 @@ function loadSettings(): AppSettings {
 
 function saveSettings(s: AppSettings) {
   localStorage.setItem('scout_settings', JSON.stringify(s));
+}
+
+function loadHistory(): string[] {
+  try {
+    const raw = localStorage.getItem('scout_url_history');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveHistory(h: string[]) {
+  localStorage.setItem('scout_url_history', JSON.stringify(h));
 }
 
 export default function ScraperTool() {
@@ -60,10 +72,13 @@ export default function ScraperTool() {
     desktop: true, mobile: false, blockPopups: true,
   });
 
+  // URL history
+  const [urlHistory, setUrlHistory] = useState<string[]>(loadHistory);
+
   // Active SSE connection ref for cancellation
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // ── Settings persistence ──────────────────────────────────────────────────
+  // ── Persistence ───────────────────────────────────────────────────────────
   useEffect(() => { saveSettings(settings); }, [settings]);
 
   // ── Start scan ────────────────────────────────────────────────────────────
@@ -72,6 +87,13 @@ export default function ScraperTool() {
 
     let url = inputUrl.trim();
     if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+
+    // Save to history (deduplicated, most recent first)
+    setUrlHistory((prev) => {
+      const next = [inputUrl.trim(), ...prev.filter((u) => u !== inputUrl.trim())].slice(0, MAX_HISTORY);
+      saveHistory(next);
+      return next;
+    });
 
     // Cancel any in-flight scan
     if (eventSourceRef.current) {
@@ -225,6 +247,8 @@ export default function ScraperTool() {
         onScan={() => handleStartScan(urlInput)}
         scanning={scanState === 'scanning'}
         onOpenSettings={() => setShowSettings(true)}
+        urlHistory={urlHistory}
+        onSelectHistory={(url) => setUrlInput(url)}
       />
 
       {/* Main content */}
@@ -267,7 +291,7 @@ export default function ScraperTool() {
             {/* Split pane */}
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden', borderBottom: '1px solid #3c3c3c' }}>
               {/* Left: tree */}
-              <div style={{ width: frameableStatus === 'yes' ? '60%' : '100%', minWidth: 260, borderRight: frameableStatus === 'yes' ? '1px solid #3c3c3c' : 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width 0.2s ease' }}>
+              <div style={{ width: previewUrl ? '60%' : '100%', minWidth: 260, borderRight: previewUrl ? '1px solid #3c3c3c' : 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'width 0.2s ease' }}>
                 <TreeView
                   nodes={visibleSitemapData}
                   selectedPaths={selectedPaths}
@@ -282,8 +306,8 @@ export default function ScraperTool() {
                 />
               </div>
 
-              {/* Right: preview — only shown when site allows framing */}
-              {frameableStatus === 'yes' && (
+              {/* Right: preview — shown whenever a URL is selected */}
+              {previewUrl && (
                 <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <PreviewPane
                     url={previewUrl}

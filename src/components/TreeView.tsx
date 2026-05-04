@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, X } from 'lucide-react';
 import type { SitemapNode } from '../types';
 import { getAllDescendantPaths, areAllDescendantsSelected, countRealDescendants, flattenTree } from '../utils/treeUtils';
 
@@ -34,6 +34,9 @@ export default function TreeView({
   });
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; url: string } | null>(null);
+  const [filterText, setFilterText] = useState('');
+  const [showFilter, setShowFilter] = useState(false);
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
   const toggleExpand = useCallback((path: string) => {
     setExpanded((prev) => {
@@ -59,7 +62,71 @@ export default function TreeView({
     setExpanded(new Set(['/']));
   }, []);
 
+  // Focus filter input when showFilter becomes true
+  useEffect(() => {
+    if (showFilter) {
+      filterInputRef.current?.focus();
+    }
+  }, [showFilter]);
+
   const flatRows = useMemo(() => flattenTree(nodes, expanded), [nodes, expanded]);
+
+  // When filter text changes, auto-expand all ancestors of matching nodes
+  useEffect(() => {
+    if (!filterText) return;
+    const lower = filterText.toLowerCase();
+
+    function hasMatch(n: SitemapNode): boolean {
+      if (n.path.toLowerCase().includes(lower)) return true;
+      return n.children.some(hasMatch);
+    }
+
+    const toExpand = new Set<string>();
+    function walk(n: SitemapNode) {
+      if (n.children.length > 0 && hasMatch(n)) toExpand.add(n.path);
+      n.children.forEach(walk);
+    }
+    nodes.forEach(walk);
+    setExpanded(prev => new Set([...prev, ...toExpand]));
+  }, [filterText, nodes]);
+
+  // Compute displayRows: when filter is active, restrict flatRows to visible paths.
+  // flatRows already respects expanded state, so chevron toggling works naturally.
+  const displayRows = useMemo(() => {
+    if (!filterText) return flatRows;
+
+    const lower = filterText.toLowerCase();
+    const matchPaths = new Set<string>();
+    const ancestorPaths = new Set<string>();
+
+    function walk(n: SitemapNode) {
+      if (n.path.toLowerCase().includes(lower)) {
+        matchPaths.add(n.path);
+      }
+      n.children.forEach(walk);
+    }
+    nodes.forEach(walk);
+
+    // Collect ancestors of all matches
+    function collectAncestors(path: string) {
+      const parts = path.split('/').filter(Boolean);
+      for (let i = 1; i < parts.length; i++) {
+        ancestorPaths.add('/' + parts.slice(0, i).join('/'));
+      }
+      if (parts.length > 0) ancestorPaths.add('/');
+    }
+    matchPaths.forEach(collectAncestors);
+
+    const visible = new Set([...matchPaths, ...ancestorPaths]);
+
+    // Filter flatRows (which respects expanded) so expand/collapse works in filtered view
+    return flatRows.filter(({ node }) => visible.has(node.path));
+  }, [nodes, filterText, flatRows]);
+
+  const matchCount = useMemo(
+    () => displayRows.filter(({ node }) => node.url !== null).length,
+    [displayRows],
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -72,27 +139,108 @@ export default function TreeView({
         <span style={{ color: '#9e9e9e', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1 }}>
           Site Map
         </span>
-        <span style={{ color: '#6b6b6b', fontSize: 11 }}>
-          {selectedCount}/{totalCount}
-        </span>
+        {filterText ? (
+          <span style={{ color: '#569cd6', fontSize: 11 }}>
+            {matchCount} match{matchCount !== 1 ? 'es' : ''}
+          </span>
+        ) : (
+          <span style={{ color: '#6b6b6b', fontSize: 11 }}>
+            {selectedCount}/{totalCount}
+          </span>
+        )}
         <div style={{ width: 1, height: 14, backgroundColor: '#3c3c3c' }} />
         <HeaderButton onClick={onSelectAll} title="Select all">All</HeaderButton>
         <HeaderButton onClick={onClearAll} title="Clear selection">None</HeaderButton>
         <div style={{ width: 1, height: 14, backgroundColor: '#3c3c3c' }} />
         <HeaderButton onClick={expandAll} title="Expand all">+</HeaderButton>
         <HeaderButton onClick={collapseAll} title="Collapse all">−</HeaderButton>
+        <button
+          onClick={() => {
+            if (showFilter) {
+              setShowFilter(false);
+              setFilterText('');
+            } else {
+              setShowFilter(true);
+            }
+          }}
+          title="Filter paths"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontFamily: 'inherit', lineHeight: 1,
+            padding: '3px 6px', border: '1px solid #3c3c3c', borderRadius: 2,
+            backgroundColor: 'transparent',
+            color: showFilter || filterText ? '#569cd6' : '#9e9e9e',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => {
+            if (!showFilter && !filterText) {
+              (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!showFilter && !filterText) {
+              (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
+              (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
+            }
+          }}
+        >
+          <Search size={11} />
+        </button>
       </div>
+
+      {/* Filter bar */}
+      {showFilter && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px',
+          height: 28, backgroundColor: '#1e1e1e', borderBottom: '1px solid #3c3c3c',
+          flexShrink: 0,
+        }}>
+          <input
+            ref={filterInputRef}
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFilterText('');
+                setShowFilter(false);
+              }
+            }}
+            placeholder="Filter paths…"
+            style={{
+              flex: 1, border: 'none', backgroundColor: 'transparent',
+              fontSize: 12, color: '#cccccc', outline: 'none',
+            }}
+          />
+          {filterText && (
+            <button
+              onClick={() => setFilterText('')}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'none', border: 'none', padding: 0,
+                cursor: 'pointer', color: '#6b6b6b',
+              }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tree rows */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        {flatRows.length === 0 ? (
-          <div style={{ padding: '16px 12px', color: '#6b6b6b', fontSize: 12 }}>No URLs found.</div>
+        {displayRows.length === 0 ? (
+          <div style={{ padding: '16px 12px', color: '#6b6b6b', fontSize: 12 }}>
+            {filterText ? 'No matches.' : 'No URLs found.'}
+          </div>
         ) : (
-          flatRows.map(({ node, depth }) => (
+          displayRows.map(({ node, depth }) => (
             <TreeRow
               key={node.path}
               node={node}
               depth={depth}
+              filterText={filterText}
               isSelected={node.url !== null && selectedPaths.has(node.path)}
               isPreviewing={previewPath === node.path}
               isExpanded={expanded.has(node.path)}
@@ -133,6 +281,7 @@ export default function TreeView({
 interface RowProps {
   node: SitemapNode;
   depth: number;
+  filterText: string;
   isSelected: boolean;
   isPreviewing: boolean;
   isExpanded: boolean;
@@ -148,8 +297,24 @@ interface RowProps {
   realChildCount: number;
 }
 
+/** Render a label with the matching substring highlighted. */
+function HighlightedLabel({ text, query, baseColor }: { text: string; query: string; baseColor: string }) {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span style={{ color: '#f8c555', backgroundColor: 'rgba(248,197,85,0.18)', borderRadius: 2 }}>
+        {text.slice(idx, idx + query.length)}
+      </span>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 function TreeRow({
-  node, depth, isSelected, isPreviewing, isExpanded, isHovered,
+  node, depth, filterText, isSelected, isPreviewing, isExpanded, isHovered,
   allChildrenSelected, onToggleExpand, onToggleCheck, onSelectChildren,
   onPreview, onContextMenu, onMouseEnter, onMouseLeave, realChildCount,
 }: RowProps) {
@@ -208,7 +373,11 @@ function TreeRow({
         }}
         title={node.url || node.path}
       >
-        {label}
+        <HighlightedLabel
+          text={label}
+          query={filterText}
+          baseColor={isSynthetic ? '#6b6b6b' : isPreviewing ? '#9cdcfe' : '#cccccc'}
+        />
       </span>
 
       {/* Child count badge */}
@@ -287,22 +456,26 @@ function ContextMenu({ x, y, url, onClose }: { x: number; y: number; url: string
   );
 }
 
-function HeaderButton({ children, onClick, title }: { children: React.ReactNode; onClick: () => void; title?: string }) {
+function HeaderButton({ children, onClick, title, disabled }: { children: React.ReactNode; onClick: () => void; title?: string; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
       title={title}
+      disabled={disabled}
       style={{
-        fontSize: 11, fontFamily: 'inherit', padding: '1px 6px',
+        fontSize: 11, fontFamily: 'inherit', lineHeight: 1, padding: '3px 6px',
         border: '1px solid #3c3c3c', borderRadius: 2,
-        backgroundColor: 'transparent', color: '#9e9e9e',
-        cursor: 'pointer',
+        backgroundColor: 'transparent',
+        color: disabled ? '#444' : '#9e9e9e',
+        cursor: disabled ? 'default' : 'pointer',
       }}
       onMouseEnter={(e) => {
+        if (disabled) return;
         (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
         (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
       }}
       onMouseLeave={(e) => {
+        if (disabled) return;
         (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
         (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
       }}
