@@ -5,7 +5,7 @@ import { discoverSitemaps, getSitemapUrls } from './sitemap.js';
 
 const REQUEST_TIMEOUT = 12000;
 const MAX_TOTAL_URLS = 15000;
-const BFS_CONCURRENCY = 6;
+const BFS_CONCURRENCY = 10;
 
 const SKIP_EXTENSIONS =
   /\.(jpg|jpeg|png|gif|svg|webp|ico|bmp|tiff|pdf|zip|tar|gz|7z|rar|mp4|mp3|wav|ogg|woff|woff2|ttf|eot|otf|css|js|mjs|ts|json|xml|txt|csv|xlsx|docx|pptx|ppt|xls|dmg|exe|pkg|deb|rpm)(\?.*)?$/i;
@@ -266,11 +266,22 @@ export class Crawler extends EventEmitter {
     }
 
     // ── Phase 2: BFS Crawl ───────────────────────────────────────────────
-    // If sitemap gave good coverage (50+ URLs), supplement at depth 2; otherwise full BFS
-    const bfsMaxDepth = sitemapYieldedResults && urlSet.size >= 50 ? Math.min(depth, 2) : depth;
+    // If sitemap gave comprehensive coverage (200+ URLs), only do hop=0 to pick up orphaned
+    // top-level pages. If moderate coverage (50+), cap at depth 2. Otherwise full BFS.
+    const bfsMaxDepth = sitemapYieldedResults && urlSet.size >= 200
+      ? 0
+      : sitemapYieldedResults && urlSet.size >= 50
+      ? Math.min(depth, 2)
+      : depth;
     this.log('info', `BFS crawl: max hop depth=${bfsMaxDepth} (${sitemapYieldedResults ? 'supplementing sitemap' : 'primary discovery'})`);
 
     const visited = new Set<string>();
+    // Track URLs already enqueued to avoid duplicate queue entries.
+    // (visited only covers processed URLs; without queued, pages linked from N sources
+    // get added N times and waste batch slots on early-return no-ops.)
+    const queued = new Set<string>();
+    const normRoot = normalizeUrl(rootUrl);
+    queued.add(normRoot);
     const queue: Array<{ url: string; hop: number }> = [{ url: rootUrl, hop: 0 }];
     let crawledCount = 0;
 
@@ -323,9 +334,10 @@ export class Crawler extends EventEmitter {
                 urlsCapped = true;
               }
             }
-            if (!visited.has(link) && hop < bfsMaxDepth) {
+            if (!queued.has(link) && hop < bfsMaxDepth) {
               const linkPath = new URL(link).pathname;
               if (getPathDepth(linkPath) <= depth + (rootPathPrefix ? new URL(rootUrl).pathname.split('/').filter(Boolean).length : 0)) {
+                queued.add(link);
                 queue.push({ url: link, hop: hop + 1 });
               }
             }

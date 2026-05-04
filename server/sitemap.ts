@@ -162,21 +162,27 @@ export async function getSitemapUrls(
   rootDomain: string,
   rootPathPrefix: string | null = null
 ): Promise<{ url: string; sitemapUrl: string }[]> {
+  // Fetch all sitemap files in parallel instead of sequentially
+  const parsed = await Promise.all(
+    sitemapUrls.map(async (sitemapUrl) => ({
+      sitemapUrl,
+      urls: await parseSitemap(sitemapUrl),
+    }))
+  );
+
   const results: { url: string; sitemapUrl: string }[] = [];
 
-  for (const sitemapUrl of sitemapUrls) {
-    if (results.length >= MAX_SITEMAP_URLS) break;
-    const urls = await parseSitemap(sitemapUrl);
+  for (const { sitemapUrl, urls } of parsed) {
     for (const u of urls) {
       if (results.length >= MAX_SITEMAP_URLS) break;
       try {
-        const parsed = new URL(u);
-        const hostname = parsed.hostname.replace(/^www\./, '');
+        const parsedUrl = new URL(u);
+        const hostname = parsedUrl.hostname.replace(/^www\./, '');
         if (hostname !== rootDomain) continue;
 
         // If crawling a sub-path, restrict to URLs under that prefix
         if (rootPathPrefix) {
-          const path = parsed.pathname.replace(/\/$/, '');
+          const path = parsedUrl.pathname.replace(/\/$/, '');
           if (path !== rootPathPrefix && !path.startsWith(rootPathPrefix + '/')) continue;
         }
 
@@ -185,6 +191,7 @@ export async function getSitemapUrls(
         // skip invalid URLs
       }
     }
+    if (results.length >= MAX_SITEMAP_URLS) break;
   }
 
   return results;
