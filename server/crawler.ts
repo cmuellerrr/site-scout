@@ -5,7 +5,7 @@ import { discoverSitemaps, getSitemapUrls } from './sitemap.js';
 
 const REQUEST_TIMEOUT = 12000;
 const MAX_TOTAL_URLS = 15000;
-const BFS_CONCURRENCY = 10;
+const BFS_CONCURRENCY = 5;
 
 const SKIP_EXTENSIONS =
   /\.(jpg|jpeg|png|gif|svg|webp|ico|bmp|tiff|pdf|zip|tar|gz|7z|rar|mp4|mp3|wav|ogg|woff|woff2|ttf|eot|otf|css|js|mjs|ts|json|xml|txt|csv|xlsx|docx|pptx|ppt|xls|dmg|exe|pkg|deb|rpm)(\?.*)?$/i;
