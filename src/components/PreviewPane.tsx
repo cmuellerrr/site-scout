@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ExternalLink, ShieldOff, Monitor, RefreshCw } from 'lucide-react';
 import type { FrameableStatus } from '../types';
+import type { ScreenshotCache } from '../utils/screenshotCache';
 
 interface Props {
   url: string | null;
   frameableStatus: FrameableStatus;
   blockPopups: boolean;
   onToggleBlockPopups: (val: boolean) => void;
+  screenshotCache: ScreenshotCache;
 }
 
 const DESKTOP_W = 1440;
 
-export default function PreviewPane({ url, frameableStatus, blockPopups, onToggleBlockPopups }: Props) {
+export default function PreviewPane({ url, frameableStatus, blockPopups, onToggleBlockPopups, screenshotCache }: Props) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeStuck, setIframeStuck] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -23,7 +25,6 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
   const [screenshotSrc, setScreenshotSrc] = useState<string | null>(null);
   const [screenshotLoading, setScreenshotLoading] = useState(false);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
-  const screenshotCacheRef = useRef<Map<string, string>>(new Map());
   const screenshotAbortRef = useRef<AbortController | null>(null);
 
   // Reset state when URL changes — abort any in-flight screenshot request
@@ -72,7 +73,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
   }, []);
 
   const captureScreenshot = useCallback(async (targetUrl: string) => {
-    const cached = screenshotCacheRef.current.get(targetUrl);
+    const cached = screenshotCache.get(targetUrl, blockPopups);
     if (cached) {
       setScreenshotSrc(cached);
       return;
@@ -88,7 +89,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
     setScreenshotSrc(null);
 
     try {
-      const res = await fetch(`/api/screenshot?url=${encodeURIComponent(targetUrl)}&mobile=false`, {
+      const res = await fetch(`/api/screenshot?url=${encodeURIComponent(targetUrl)}&mobile=false&blockPopups=${blockPopups}`, {
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -97,7 +98,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
       }
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
-      screenshotCacheRef.current.set(targetUrl, objectUrl);
+      screenshotCache.set(targetUrl, blockPopups, objectUrl);
       setScreenshotSrc(objectUrl);
     } catch (err) {
       if ((err as { name?: string }).name === 'AbortError') return; // user navigated away
@@ -105,7 +106,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
     } finally {
       setScreenshotLoading(false);
     }
-  }, []);
+  }, [blockPopups, screenshotCache]);
 
   const showBlocked = frameableStatus === 'no' || iframeStuck;
   const showChecking = frameableStatus === 'checking';
@@ -154,7 +155,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
           <button
             onClick={() => {
               if (url) {
-                screenshotCacheRef.current.delete(url);
+                screenshotCache.delete(url, blockPopups);
                 captureScreenshot(url);
               }
             }}
@@ -271,7 +272,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
                 </div>
                 <button
                   onClick={() => {
-                    screenshotCacheRef.current.delete(url);
+                    screenshotCache.delete(url, blockPopups);
                     captureScreenshot(url);
                   }}
                   style={{

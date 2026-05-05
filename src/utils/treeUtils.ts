@@ -22,6 +22,23 @@ export function getAllDescendantPaths(node: SitemapNode): string[] {
   return paths;
 }
 
+/** Get real descendant paths for a node's children only — excludes the node itself */
+export function getChildDescendantPaths(node: SitemapNode): string[] {
+  const paths: string[] = [];
+  function walk(n: SitemapNode) {
+    if (n.url !== null) paths.push(n.path);
+    n.children.forEach(walk);
+  }
+  node.children.forEach(walk);
+  return paths;
+}
+
+/** Check if all of a node's children (not the node itself) are selected */
+export function areAllChildrenSelected(node: SitemapNode, selected: Set<string>): boolean {
+  const childPaths = getChildDescendantPaths(node);
+  return childPaths.length > 0 && childPaths.every((p) => selected.has(p));
+}
+
 /** Count real (non-synthetic) nodes in a subtree */
 export function countRealDescendants(node: SitemapNode): number {
   let count = node.url !== null ? 1 : 0;

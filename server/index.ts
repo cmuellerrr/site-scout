@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import type { Request, Response } from 'express';
-import { Crawler, CrawlError } from './crawler.js';
+import { Crawler, CrawlError, type CrawlOptions } from './crawler.js';
 import type { SSEEvent } from './types.js';
-import { takeScreenshot } from './screenshot.js';
+import { takeScreenshot, getConcurrencyStats } from './screenshot.js';
 
 const app = express();
 const PORT = 3001;
@@ -27,6 +27,12 @@ app.get('/api/crawl', async (req: Request, res: Response) => {
   }
 
   const depth = Math.min(Math.max(parseInt(depthStr || '3', 10), 1), 5);
+  const filterLocales = req.query.filterLocales === 'true';
+  const excludePathsStr = (req.query.excludePaths as string) || '';
+  const excludePaths = excludePathsStr ? excludePathsStr.split(',').filter(Boolean) : [];
+  const crawlOptions: CrawlOptions = { filterLocales, excludePaths };
+  console.log('[crawl] received crawlOptions:', JSON.stringify(crawlOptions));
+  console.log('[crawl] raw excludePaths query param:', JSON.stringify(req.query.excludePaths));
 
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -52,7 +58,7 @@ app.get('/api/crawl', async (req: Request, res: Response) => {
   });
 
   try {
-    const { tree, urlsCapped } = await crawler.crawl(url, depth);
+    const { tree, urlsCapped } = await crawler.crawl(url, depth, crawlOptions);
     sseWrite(res, { type: 'complete', data: tree, logs: crawler.getLogs(), urlsCapped });
   } catch (e: any) {
     if (e instanceof CrawlError) {
@@ -126,10 +132,16 @@ app.get('/api/check-frameable', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /api/screenshot/status ────────────────────────────────────────────────
+app.get('/api/screenshot/status', (_req: Request, res: Response) => {
+  res.json(getConcurrencyStats());
+});
+
 // ── GET /api/screenshot ───────────────────────────────────────────────────────
 app.get('/api/screenshot', async (req: Request, res: Response) => {
   const url = req.query.url as string;
   const mobile = req.query.mobile === 'true';
+  const blockPopups = req.query.blockPopups !== 'false'; // default true
 
   if (!url) {
     res.status(400).json({ error: 'url required' });
@@ -137,7 +149,7 @@ app.get('/api/screenshot', async (req: Request, res: Response) => {
   }
 
   try {
-    const buf = await takeScreenshot(url, mobile);
+    const buf = await takeScreenshot(url, mobile, blockPopups);
     res.setHeader('Content-Type', 'image/jpeg');
     res.send(buf);
   } catch (e: any) {

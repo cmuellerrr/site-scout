@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Download, AlertCircle, CheckCircle } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import type { SitemapNode, ScreenshotOptions } from '../../types';
+import type { ScreenshotCache } from '../../utils/screenshotCache';
 import { Modal } from './UrlListModal';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   options: ScreenshotOptions;
   onOptionsChange: (opts: ScreenshotOptions) => void;
   onClose: () => void;
+  screenshotCache: ScreenshotCache;
 }
 
 interface ScreenshotResult {
@@ -22,13 +24,25 @@ interface ScreenshotResult {
   error?: string;
 }
 
-export default function ScreenshotModal({ nodes, rootUrl, options, onOptionsChange, onClose }: Props) {
+export default function ScreenshotModal({ nodes, rootUrl, options, onOptionsChange, onClose, screenshotCache }: Props) {
   const [phase, setPhase] = useState<'confirm' | 'progress' | 'done'>('confirm');
   const [localOptions, setLocalOptions] = useState<ScreenshotOptions>(options);
   const [results, setResults] = useState<ScreenshotResult[]>([]);
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
+  const [serverBusy, setServerBusy] = useState(false);
   const abortRef = useRef(false);
   const blobsRef = useRef<Map<string, Blob>>(new Map());
+
+  // Check server queue depth when the confirm screen is open
+  useEffect(() => {
+    if (phase !== 'confirm') return;
+    fetch('/api/screenshot/status')
+      .then((r) => r.json())
+      .then((data: { active: number; queued: number }) => {
+        setServerBusy(data.active + data.queued > 0);
+      })
+      .catch(() => {});
+  }, [phase]);
 
   const setOpt = useCallback(<K extends keyof ScreenshotOptions>(key: K, val: ScreenshotOptions[K]) => {
     setLocalOptions((p) => ({ ...p, [key]: val }));
@@ -63,14 +77,26 @@ export default function ScreenshotModal({ nodes, rootUrl, options, onOptionsChan
       ));
 
       try {
-        const params = new URLSearchParams({ url: item.url, mobile: String(item.variant === 'mobile') });
-        const res = await fetch(`/api/screenshot?${params}`);
-        const ct = res.headers.get('content-type') || '';
-        if (!res.ok || ct.includes('application/json')) {
-          const err = await res.json();
-          throw new Error(err.error || `HTTP ${res.status}`);
+        let blob: Blob;
+
+        // Reuse preview cache for desktop captures — skips a full Puppeteer round-trip
+        const cachedBlobUrl = item.variant === 'desktop'
+          ? screenshotCache.peek(item.url, localOptions.blockPopups)
+          : undefined;
+
+        if (cachedBlobUrl) {
+          blob = await fetch(cachedBlobUrl).then((r) => r.blob());
+        } else {
+          const params = new URLSearchParams({ url: item.url, mobile: String(item.variant === 'mobile'), blockPopups: String(localOptions.blockPopups) });
+          const res = await fetch(`/api/screenshot?${params}`);
+          const ct = res.headers.get('content-type') || '';
+          if (!res.ok || ct.includes('application/json')) {
+            const err = await res.json();
+            throw new Error(err.error || `HTTP ${res.status}`);
+          }
+          blob = await res.blob();
         }
-        const blob = await res.blob();
+
         blobsRef.current.set(`${item.variant}:${item.path}`, blob);
         setResults((prev) => prev.map((r) =>
           r.url === item.url && r.variant === item.variant ? { ...r, status: 'done', blob } : r
@@ -157,6 +183,15 @@ export default function ScreenshotModal({ nodes, rootUrl, options, onOptionsChan
             <ConfirmLabel>Options</ConfirmLabel>
             <CheckOption label="Block cookie banners" checked={localOptions.blockPopups} onChange={(v) => setOpt('blockPopups', v)} />
           </div>
+
+          {serverBusy && (
+            <div style={{
+              fontSize: 11, color: '#cca700', backgroundColor: '#2d2008',
+              border: '1px solid #6b4c00', borderRadius: 2, padding: '6px 10px',
+            }}>
+              ⚠ Other captures are currently running on the server — yours may take a little longer to start.
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: '#555' }}>

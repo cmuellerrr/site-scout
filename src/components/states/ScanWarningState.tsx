@@ -36,12 +36,20 @@ const ERROR_DEFS: Record<CrawlErrorCode, {
   blocked_http: {
     icon: 'shield',
     title: 'Access blocked',
-    tips: ['This site returns 403/429 — bot protection is likely active', 'Try scanning a specific sub-path', 'Some enterprise sites block all crawlers'],
+    tips: [
+      'Bot protection is active (Cloudflare, Akamai, or similar) — the server is rejecting automated requests',
+      'Try scanning a specific sub-path if only part of the site is protected',
+      'Some enterprise and high-traffic sites block all non-browser traffic by design',
+    ],
   },
   blocked_empty: {
     icon: 'shield',
     title: 'No pages discovered',
-    tips: ['The site may be a JavaScript-only SPA with no sitemap', 'No sitemap.xml was found', 'Try scanning a more specific path within the site'],
+    tips: [
+      'The site likely uses a JavaScript framework (React, Next.js, etc.) that renders navigation client-side — links aren\'t in the HTML source',
+      'No sitemap.xml was found; check manually at /sitemap.xml or /robots.txt',
+      'Try a sub-path like /blog or /docs where static links may be more common',
+    ],
   },
 };
 

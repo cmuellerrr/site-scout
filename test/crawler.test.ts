@@ -375,6 +375,132 @@ describe('Sub-path scoping', () => {
   });
 });
 
+describe('filterLocales crawl option', () => {
+  let base: string, stop: () => void;
+
+  beforeAll(async () => {
+    ({ base, stop } = await makeServer({
+      '/': { ct: 'text/html', body: html('/about', '/fr', '/fr/about', '/en-gb', '/en-gb/about', '/zh-hans/page') },
+      '/about': { ct: 'text/html', body: html('/') },
+      '/fr': { ct: 'text/html', body: html('/') },
+      '/fr/about': { ct: 'text/html', body: html('/') },
+      '/en-gb': { ct: 'text/html', body: html('/') },
+      '/en-gb/about': { ct: 'text/html', body: html('/') },
+      '/zh-hans/page': { ct: 'text/html', body: html('/') },
+    }));
+  });
+  afterAll(() => stop());
+
+  it('includes locale paths when filterLocales is false', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { filterLocales: false });
+    const paths = collectPaths(tree);
+    expect(paths.has('/fr')).toBe(true);
+    expect(paths.has('/fr/about')).toBe(true);
+    expect(paths.has('/en-gb')).toBe(true);
+    expect(paths.has('/en-gb/about')).toBe(true);
+  });
+
+  it('excludes locale-prefixed paths when filterLocales is true', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { filterLocales: true });
+    const paths = collectPaths(tree);
+    expect(paths.has('/about')).toBe(true);
+    expect(paths.has('/fr')).toBe(false);
+    expect(paths.has('/fr/about')).toBe(false);
+    expect(paths.has('/en-gb')).toBe(false);
+    expect(paths.has('/en-gb/about')).toBe(false);
+    expect(paths.has('/zh-hans/page')).toBe(false);
+  });
+});
+
+describe('excludePaths crawl option — BFS', () => {
+  let base: string, stop: () => void;
+
+  beforeAll(async () => {
+    ({ base, stop } = await makeServer({
+      '/': { ct: 'text/html', body: html('/about', '/blog', '/blog/post-1', '/news', '/news/story-1') },
+      '/about': { ct: 'text/html', body: html('/') },
+      '/blog': { ct: 'text/html', body: html('/blog/post-1') },
+      '/blog/post-1': { ct: 'text/html', body: html('/blog') },
+      '/news': { ct: 'text/html', body: html('/news/story-1') },
+      '/news/story-1': { ct: 'text/html', body: html('/news') },
+    }));
+  });
+  afterAll(() => stop());
+
+  it('crawls everything when excludePaths is empty', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { excludePaths: [] });
+    const paths = collectPaths(tree);
+    expect(paths.has('/blog')).toBe(true);
+    expect(paths.has('/blog/post-1')).toBe(true);
+    expect(paths.has('/news')).toBe(true);
+    expect(paths.has('/news/story-1')).toBe(true);
+  });
+
+  it('excludes the exact path and all descendants', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { excludePaths: ['/blog'] });
+    const paths = collectPaths(tree);
+    expect(paths.has('/about')).toBe(true);
+    expect(paths.has('/news')).toBe(true);
+    expect(paths.has('/blog')).toBe(false);
+    expect(paths.has('/blog/post-1')).toBe(false);
+  });
+
+  it('supports multiple excluded prefixes', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { excludePaths: ['/blog', '/news'] });
+    const paths = collectPaths(tree);
+    expect(paths.has('/about')).toBe(true);
+    expect(paths.has('/blog')).toBe(false);
+    expect(paths.has('/blog/post-1')).toBe(false);
+    expect(paths.has('/news')).toBe(false);
+    expect(paths.has('/news/story-1')).toBe(false);
+  });
+});
+
+describe('excludePaths crawl option — sitemap phase', () => {
+  let base: string, stop: () => void;
+
+  beforeAll(async () => {
+    const srv = http.createServer((req, res) => {
+      const path = new URL(req.url ?? '/', 'http://x').pathname;
+      const b = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+      if (path === '/robots.txt') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(`Sitemap: ${b}/sitemap.xml\n`);
+        return;
+      }
+      if (path === '/sitemap.xml') {
+        const urls = [
+          `${b}/`,
+          `${b}/about`,
+          `${b}/news`,
+          `${b}/news/story-1`,
+          `${b}/news/story-2`,
+          `${b}/blog/post-1`,
+        ];
+        res.writeHead(200, { 'Content-Type': 'application/xml' });
+        res.end(sitemapXml(urls));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html());
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    base = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
+    stop = () => srv.close();
+  });
+  afterAll(() => stop());
+
+  it('omits excluded paths sourced from the sitemap', async () => {
+    const { tree } = await new Crawler().crawl(base, 3, { excludePaths: ['/news'] });
+    const paths = collectPaths(tree);
+    expect(paths.has('/about')).toBe(true);
+    expect(paths.has('/blog/post-1')).toBe(true);
+    expect(paths.has('/news')).toBe(false);
+    expect(paths.has('/news/story-1')).toBe(false);
+    expect(paths.has('/news/story-2')).toBe(false);
+  });
+});
+
 describe('urlsCapped flag', () => {
   let base: string, stop: () => void;
 

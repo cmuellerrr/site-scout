@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Modal } from './UrlListModal';
 import type { AppSettings } from '../../types';
 
@@ -9,18 +9,42 @@ interface Props {
   onClose: () => void;
 }
 
+const PRESET_PATHS = ['/blog', '/news', '/support', '/forum', '/careers', '/tag', '/author', '/category', '/page'];
+
 export default function SettingsModal({ settings, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<AppSettings>(settings);
+  const [customInput, setCustomInput] = useState('');
 
-  function handleSave() {
-    onSave(draft);
+  const customPaths = draft.excludePaths.filter((p) => !PRESET_PATHS.includes(p));
+
+  function togglePreset(path: string) {
+    setDraft((prev) => ({
+      ...prev,
+      excludePaths: prev.excludePaths.includes(path)
+        ? prev.excludePaths.filter((p) => p !== path)
+        : [...prev.excludePaths, path],
+    }));
+  }
+
+  function addCustomPath() {
+    let path = customInput.trim();
+    if (!path) return;
+    if (!path.startsWith('/')) path = `/${path}`;
+    if (!draft.excludePaths.includes(path)) {
+      setDraft((prev) => ({ ...prev, excludePaths: [...prev.excludePaths, path] }));
+    }
+    setCustomInput('');
+  }
+
+  function removeCustomPath(path: string) {
+    setDraft((prev) => ({ ...prev, excludePaths: prev.excludePaths.filter((p) => p !== path) }));
   }
 
   return (
     <Modal title="Settings" onClose={onClose} width={480}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Crawl settings */}
+        {/* Crawl */}
         <Section title="Crawl">
           <FieldRow label="Depth" hint="From root page">
             <div style={{ display: 'flex', gap: 6 }}>
@@ -41,20 +65,94 @@ export default function SettingsModal({ settings, onSave, onClose }: Props) {
               ))}
             </div>
           </FieldRow>
-          <FieldRow label="Localized pages" hint="e.g. /fr/, /en-gb/">
+        </Section>
+
+        {/* Filters */}
+        <Section title="Filters">
+          <FieldRow label="Locale variants" hint="e.g. /fr/, /en-gb/">
             <CheckOption
-              label="Hide locale variants"
+              label="Skip locale pages during crawl"
               checked={draft.filterLocales}
               onChange={(v) => setDraft((p) => ({ ...p, filterLocales: v }))}
             />
           </FieldRow>
-        </Section>
 
+          <FieldRow label="Exclude paths" hint="Skipped during crawl">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+              {/* Preset toggles */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {PRESET_PATHS.map((path) => {
+                  const active = draft.excludePaths.includes(path);
+                  return (
+                    <button
+                      key={path}
+                      onClick={() => togglePreset(path)}
+                      style={{
+                        fontSize: 11, fontFamily: 'inherit', cursor: 'pointer',
+                        padding: '2px 7px', borderRadius: 2,
+                        border: `1px solid ${active ? '#569cd6' : '#3c3c3c'}`,
+                        backgroundColor: active ? '#094771' : 'transparent',
+                        color: active ? '#9cdcfe' : '#6b6b6b',
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      {path}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom chips */}
+              {customPaths.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {customPaths.map((path) => (
+                    <span
+                      key={path}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                        fontSize: 11, padding: '2px 4px 2px 7px',
+                        border: '1px solid #569cd6', borderRadius: 2,
+                        backgroundColor: '#094771', color: '#9cdcfe',
+                      }}
+                    >
+                      {path}
+                      <button
+                        onClick={() => removeCustomPath(path)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#9cdcfe', padding: '0 1px', lineHeight: 1,
+                        }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Custom path input */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="text"
+                  value={customInput}
+                  onChange={(e) => setCustomInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addCustomPath(); }}
+                  placeholder="Custom path, e.g. /docs"
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <button onClick={addCustomPath} style={cancelBtn}>Add</button>
+              </div>
+
+            </div>
+          </FieldRow>
+        </Section>
 
         {/* Save */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} style={cancelBtn}>Cancel</button>
-          <button onClick={handleSave} style={saveBtn}>Save settings</button>
+          <button onClick={() => onSave(draft)} style={saveBtn}>Save settings</button>
         </div>
       </div>
     </Modal>
@@ -62,7 +160,7 @@ export default function SettingsModal({ settings, onSave, onClose }: Props) {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '4px 8px', backgroundColor: '#3c3c3c',
+  padding: '4px 8px', backgroundColor: '#3c3c3c',
   border: '1px solid #555', borderRadius: 2, color: '#cccccc',
   fontFamily: 'inherit', fontSize: 12, outline: 'none',
 };
@@ -71,6 +169,7 @@ const cancelBtn: React.CSSProperties = {
   padding: '4px 12px', fontSize: 12, fontFamily: 'inherit',
   border: '1px solid #3c3c3c', borderRadius: 2,
   backgroundColor: 'transparent', color: '#9e9e9e', cursor: 'pointer',
+  whiteSpace: 'nowrap',
 };
 
 const saveBtn: React.CSSProperties = {
@@ -79,24 +178,14 @@ const saveBtn: React.CSSProperties = {
   backgroundColor: '#094771', color: '#9cdcfe', cursor: 'pointer',
 };
 
-function Section({ title, href, children }: { title: string; href?: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
         fontSize: 10, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.1em',
         marginBottom: 10, paddingBottom: 4, borderBottom: '1px solid #2d2d2d',
       }}>
         {title}
-        {href && (
-          <a href={href} target="_blank" rel="noopener noreferrer"
-            style={{ color: '#6b6b6b', display: 'flex', alignItems: 'center', lineHeight: 1 }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#9e9e9e')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b6b6b')}
-          >
-            <ExternalLink size={10} />
-          </a>
-        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>
     </div>
@@ -121,15 +210,5 @@ function CheckOption({ label, checked, onChange }: { label: string; checked: boo
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
-  );
-}
-
-function SpinnerTiny() {
-  return (
-    <span style={{
-      display: 'inline-block', width: 10, height: 10, verticalAlign: 'middle',
-      border: '1.5px solid #3c3c3c', borderTopColor: '#569cd6',
-      borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-    }} />
   );
 }

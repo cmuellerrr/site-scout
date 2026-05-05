@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ScanState, SitemapNode, LogEntry, CrawlErrorCode, FrameableStatus, AppSettings, ScreenshotOptions } from '../types';
-import { collectRealNodes, getAllDescendantPaths } from '../utils/treeUtils';
+import { collectRealNodes, getChildDescendantPaths } from '../utils/treeUtils';
+import { ScreenshotCache } from '../utils/screenshotCache';
 import Toolbar from './Toolbar';
 import TreeView from './TreeView';
 import PreviewPane from './PreviewPane';
@@ -14,7 +15,7 @@ import ScreenshotModal from './modals/ScreenshotModal';
 import VisualSitemapModal from './modals/VisualSitemapModal';
 import HelpModal from './modals/HelpModal';
 
-const DEFAULT_SETTINGS: AppSettings = { depth: 3, filterLocales: true };
+const DEFAULT_SETTINGS: AppSettings = { depth: 3, filterLocales: true, excludePaths: [] };
 const MAX_HISTORY = 8;
 
 function loadSettings(): AppSettings {
@@ -74,6 +75,9 @@ export default function ScraperTool() {
     desktop: true, mobile: false, blockPopups: true,
   });
 
+  // Shared preview screenshot cache (LRU, max 20 entries)
+  const screenshotCacheRef = useRef(new ScreenshotCache(20));
+
   // URL history
   const [urlHistory, setUrlHistory] = useState<string[]>(loadHistory);
 
@@ -122,7 +126,14 @@ export default function ScraperTool() {
       }
     } catch { /* ignore */ }
 
-    const params = new URLSearchParams({ url, depth: String(settings.depth) });
+    const params = new URLSearchParams({
+      url,
+      depth: String(settings.depth),
+      filterLocales: String(settings.filterLocales),
+      excludePaths: settings.excludePaths.join(','),
+    });
+    console.log('[scan] settings.excludePaths:', settings.excludePaths);
+    console.log('[scan] excludePaths param:', settings.excludePaths.join(','));
     const es = new EventSource(`/api/crawl?${params}`);
     eventSourceRef.current = es;
 
@@ -172,7 +183,7 @@ export default function ScraperTool() {
       es.close();
       eventSourceRef.current = null;
     };
-  }, [settings.depth, scanState]);
+  }, [settings, scanState]);
 
   const handleRetry = useCallback(() => handleStartScan(urlInput), [handleStartScan, urlInput]);
   const handleBack = useCallback(() => setScanState('idle'), []);
@@ -209,7 +220,7 @@ export default function ScraperTool() {
   }, []);
 
   const toggleChildren = useCallback((node: SitemapNode, select: boolean) => {
-    const paths = getAllDescendantPaths(node);
+    const paths = getChildDescendantPaths(node);
     setSelectedPaths((prev) => {
       const next = new Set(prev);
       if (select) paths.forEach((p) => next.add(p));
@@ -225,15 +236,7 @@ export default function ScraperTool() {
   const clearAll = useCallback(() => setSelectedPaths(new Set()), []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const LOCALE_RE = /^\/([a-z]{2}|[a-z]{2}-[a-z]{2,4})(\/|$)/i;
-
-  function filterLocaleNodes(nodes: SitemapNode[]): SitemapNode[] {
-    return nodes
-      .filter((n) => !LOCALE_RE.test(n.path))
-      .map((n) => ({ ...n, children: filterLocaleNodes(n.children) }));
-  }
-
-  const visibleSitemapData = settings.filterLocales ? filterLocaleNodes(sitemapData) : sitemapData;
+  const visibleSitemapData = sitemapData;
   const realNodes = collectRealNodes(visibleSitemapData);
   const selectedNodes = realNodes.filter((n) => selectedPaths.has(n.path));
   const selectedCount = selectedNodes.length;
@@ -317,6 +320,7 @@ export default function ScraperTool() {
                     frameableStatus={frameableStatus}
                     blockPopups={screenshotOptions.blockPopups}
                     onToggleBlockPopups={(val) => setScreenshotOptions((p) => ({ ...p, blockPopups: val }))}
+                    screenshotCache={screenshotCacheRef.current}
                   />
                 </div>
               )}
@@ -399,6 +403,7 @@ export default function ScraperTool() {
           options={screenshotOptions}
           onOptionsChange={setScreenshotOptions}
           onClose={() => setShowScreenshot(false)}
+          screenshotCache={screenshotCacheRef.current}
         />
       )}
     </div>
@@ -414,11 +419,11 @@ function TaskButton({
   primary?: boolean;
   title?: string;
 }) {
-  return (
+  const btn = (
     <button
       onClick={onClick}
       disabled={disabled}
-      title={title}
+      title={disabled ? undefined : title}
       style={{
         padding: '2px 10px',
         fontSize: 12,
@@ -435,4 +440,9 @@ function TaskButton({
       {children}
     </button>
   );
+  // Disabled buttons don't show title tooltips in Chrome — wrap in a span
+  if (disabled && title) {
+    return <span title={title} style={{ display: 'inline-flex', cursor: 'not-allowed' }}>{btn}</span>;
+  }
+  return btn;
 }

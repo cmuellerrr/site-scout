@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Search, X } from 'lucide-react';
 import type { SitemapNode } from '../types';
-import { getAllDescendantPaths, areAllDescendantsSelected, countRealDescendants, flattenTree } from '../utils/treeUtils';
+import { areAllChildrenSelected, countRealDescendants, flattenTree } from '../utils/treeUtils';
 
 interface Props {
   nodes: SitemapNode[];
@@ -245,11 +245,11 @@ export default function TreeView({
               isPreviewing={previewPath === node.path}
               isExpanded={expanded.has(node.path)}
               isHovered={hoveredPath === node.path}
-              allChildrenSelected={areAllDescendantsSelected(node, selectedPaths)}
+              allChildrenSelected={areAllChildrenSelected(node, selectedPaths)}
               onToggleExpand={() => toggleExpand(node.path)}
               onToggleCheck={() => onToggleNode(node)}
               onSelectChildren={() => {
-                const allSelected = areAllDescendantsSelected(node, selectedPaths);
+                const allSelected = areAllChildrenSelected(node, selectedPaths);
                 onToggleChildren(node, !allSelected);
               }}
               onPreview={() => node.url && onPreviewUrl(node.url)}
@@ -380,30 +380,24 @@ function TreeRow({
         />
       </span>
 
-      {/* Child count badge */}
-      {realChildCount > 0 && !isHovered && (
-        <span style={{
-          flexShrink: 0, fontSize: 10, color: '#6b6b6b',
-          backgroundColor: '#2d2d2d', border: '1px solid #3c3c3c',
-          borderRadius: 2, padding: '0 4px', lineHeight: '14px',
-        }}>
-          {realChildCount}
-        </span>
-      )}
-
-      {/* Hover actions */}
-      {isHovered && hasChildren && (
+      {/* Child count / select-children button — animates between the two */}
+      {realChildCount > 0 && (
         <button
-          onClick={(e) => { e.stopPropagation(); onSelectChildren(); }}
-          title={allChildrenSelected ? 'Deselect children' : 'Select children'}
+          onClick={(e) => { if (isHovered && hasChildren) { e.stopPropagation(); onSelectChildren(); } }}
           style={{
-            flexShrink: 0, fontSize: 10, color: '#9e9e9e',
+            flexShrink: 0, fontSize: 10, fontFamily: 'inherit',
             backgroundColor: '#2d2d2d', border: '1px solid #3c3c3c',
             borderRadius: 2, padding: '0 5px', lineHeight: '16px',
-            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+            overflow: 'hidden', whiteSpace: 'nowrap',
+            cursor: isHovered && hasChildren ? 'pointer' : 'default',
+            color: isHovered && hasChildren ? '#9e9e9e' : '#6b6b6b',
+            maxWidth: isHovered && hasChildren ? '130px' : '26px',
+            transition: 'max-width 0.18s ease, color 0.12s',
           }}
         >
-          {allChildrenSelected ? '−children' : '+children'}
+          {isHovered && hasChildren
+            ? (allChildrenSelected ? 'Deselect children' : 'Select children')
+            : realChildCount}
         </button>
       )}
     </div>

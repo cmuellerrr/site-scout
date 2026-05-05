@@ -32,4 +32,5 @@ export interface ScreenshotOptions {
 export interface AppSettings {
   depth: number;
   filterLocales: boolean;
+  excludePaths: string[];
 }

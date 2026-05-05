@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "lsof -ti :3001 | xargs kill -9 2>/dev/null; true",
     "dev": "concurrently -n server,vite -c cyan,yellow \"tsx watch server/index.ts\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",

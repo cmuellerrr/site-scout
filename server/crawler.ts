@@ -10,6 +10,23 @@ const BFS_CONCURRENCY = 10;
 const SKIP_EXTENSIONS =
   /\.(jpg|jpeg|png|gif|svg|webp|ico|bmp|tiff|pdf|zip|tar|gz|7z|rar|mp4|mp3|wav|ogg|woff|woff2|ttf|eot|otf|css|js|mjs|ts|json|xml|txt|csv|xlsx|docx|pptx|ppt|xls|dmg|exe|pkg|deb|rpm)(\?.*)?$/i;
 
+const LOCALE_RE = /^\/([a-z]{2}|[a-z]{2}-[a-z]{2,4})(\/|$)/i;
+
+export interface CrawlOptions {
+  filterLocales?: boolean;
+  excludePaths?: string[];
+}
+
+function isExcluded(pathname: string, options: CrawlOptions): boolean {
+  if (options.filterLocales && LOCALE_RE.test(pathname)) return true;
+  if (options.excludePaths) {
+    for (const prefix of options.excludePaths) {
+      const p = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+      if (pathname === p || pathname.startsWith(p + '/')) return true;
+    }
+  }
+  return false;
+}
 
 export class CrawlError extends Error {
   constructor(public code: CrawlErrorCode, message: string) {
@@ -203,7 +220,7 @@ export class Crawler extends EventEmitter {
     return this.logs;
   }
 
-  async crawl(inputUrl: string, depth: number): Promise<{ tree: SitemapNode[]; urlsCapped: boolean }> {
+  async crawl(inputUrl: string, depth: number, crawlOptions: CrawlOptions = {}): Promise<{ tree: SitemapNode[]; urlsCapped: boolean }> {
     this.logs = [];
     const rootUrl = normalizeRootUrl(inputUrl);
     const rootHostname = new URL(rootUrl).hostname;
@@ -245,6 +262,10 @@ export class Crawler extends EventEmitter {
 
         let added = 0;
         for (const { url } of sitemapEntries) {
+          try {
+            const pathname = new URL(url).pathname;
+            if (isExcluded(pathname, crawlOptions)) continue;
+          } catch { continue; }
           const norm = normalizeUrl(url);
           if (urlSet.has(norm)) continue;
           if (urlSet.size < MAX_TOTAL_URLS) {
@@ -320,11 +341,15 @@ export class Crawler extends EventEmitter {
           let newCount = 0;
 
           for (const link of links) {
-            // If user entered a sub-path, only collect URLs under that prefix
+            const linkPath = new URL(link).pathname.replace(/\/$/, '');
+
+            // Sub-path scope check
             if (rootPathPrefix) {
-              const linkPath = new URL(link).pathname.replace(/\/$/, '');
               if (linkPath !== rootPathPrefix && !linkPath.startsWith(rootPathPrefix + '/')) continue;
             }
+
+            // Exclusion check
+            if (isExcluded(new URL(link).pathname, crawlOptions)) continue;
 
             if (!urlSet.has(link)) {
               if (urlSet.size < MAX_TOTAL_URLS) {
@@ -335,8 +360,7 @@ export class Crawler extends EventEmitter {
               }
             }
             if (!queued.has(link) && hop < bfsMaxDepth) {
-              const linkPath = new URL(link).pathname;
-              if (getPathDepth(linkPath) <= depth + (rootPathPrefix ? new URL(rootUrl).pathname.split('/').filter(Boolean).length : 0)) {
+              if (getPathDepth(new URL(link).pathname) <= depth + (rootPathPrefix ? new URL(rootUrl).pathname.split('/').filter(Boolean).length : 0)) {
                 queued.add(link);
                 queue.push({ url: link, hop: hop + 1 });
               }
