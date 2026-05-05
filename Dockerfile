@@ -8,8 +8,7 @@ RUN apt-get update && apt-get install -y \
 
 # Tell Puppeteer to skip its own Chrome download and use the system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    NODE_ENV=production
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -18,6 +17,9 @@ RUN npm install
 
 COPY . .
 RUN npm run build
+
+# Set production env after build so devDependencies were available during build
+ENV NODE_ENV=production
 
 EXPOSE 10000
 
