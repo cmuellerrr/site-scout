@@ -132,8 +132,6 @@ export default function ScraperTool() {
       filterLocales: String(settings.filterLocales),
       excludePaths: settings.excludePaths.join(','),
     });
-    console.log('[scan] settings.excludePaths:', settings.excludePaths);
-    console.log('[scan] excludePaths param:', settings.excludePaths.join(','));
     const es = new EventSource(`/api/crawl?${params}`);
     eventSourceRef.current = es;
 

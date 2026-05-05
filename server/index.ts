@@ -31,9 +31,6 @@ app.get('/api/crawl', async (req: Request, res: Response) => {
   const excludePathsStr = (req.query.excludePaths as string) || '';
   const excludePaths = excludePathsStr ? excludePathsStr.split(',').filter(Boolean) : [];
   const crawlOptions: CrawlOptions = { filterLocales, excludePaths };
-  console.log('[crawl] received crawlOptions:', JSON.stringify(crawlOptions));
-  console.log('[crawl] raw excludePaths query param:', JSON.stringify(req.query.excludePaths));
-
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
