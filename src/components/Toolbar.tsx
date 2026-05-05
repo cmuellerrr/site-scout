@@ -143,28 +143,6 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
 
       <div style={{ width: 1, height: 20, backgroundColor: '#3c3c3c' }} />
 
-      {/* Help */}
-      <button
-        onClick={onOpenHelp}
-        title="About Site Scout"
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 28, height: 28, border: '1px solid #3c3c3c', borderRadius: 2,
-          backgroundColor: 'transparent', color: '#9e9e9e', cursor: 'pointer',
-          transition: 'all 0.1s',
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
-        }}
-      >
-        <Info size={14} />
-      </button>
-
       {/* Settings */}
       <button
         onClick={onOpenSettings}
@@ -185,6 +163,28 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
         }}
       >
         <Settings size={14} />
+      </button>
+
+      {/* Help */}
+      <button
+        onClick={onOpenHelp}
+        title="About Site Scout"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 28, height: 28, border: '1px solid #3c3c3c', borderRadius: 2,
+          backgroundColor: 'transparent', color: '#9e9e9e', cursor: 'pointer',
+          transition: 'all 0.1s',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
+        }}
+      >
+        <Info size={14} />
       </button>
     </div>
   );
