@@ -1,12 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import type { Request, Response } from 'express';
 import { Crawler, CrawlError, type CrawlOptions } from './crawler.js';
 import type { SSEEvent } from './types.js';
 import { takeScreenshot, getConcurrencyStats } from './screenshot.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -154,6 +157,11 @@ app.get('/api/screenshot', async (req: Request, res: Response) => {
   }
 });
 
+// ── Serve frontend (production build) ────────────────────────────────────────
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+
 app.listen(PORT, () => {
-  console.log(`Scout server running on http://localhost:${PORT}`);
+  console.log(`Scout server running on port ${PORT}`);
 });
