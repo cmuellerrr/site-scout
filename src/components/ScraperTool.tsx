@@ -12,6 +12,7 @@ import SettingsModal from './modals/SettingsModal';
 import UrlListModal from './modals/UrlListModal';
 import ScreenshotModal from './modals/ScreenshotModal';
 import VisualSitemapModal from './modals/VisualSitemapModal';
+import HelpModal from './modals/HelpModal';
 
 const DEFAULT_SETTINGS: AppSettings = { depth: 3, filterLocales: true };
 const MAX_HISTORY = 8;
@@ -63,6 +64,7 @@ export default function ScraperTool() {
 
   // Modals
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showUrlList, setShowUrlList] = useState(false);
   const [showScreenshot, setShowScreenshot] = useState(false);
   const [showDiagram, setShowDiagram] = useState(false);
@@ -247,6 +249,7 @@ export default function ScraperTool() {
         onScan={() => handleStartScan(urlInput)}
         scanning={scanState === 'scanning'}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenHelp={() => setShowHelp(true)}
         urlHistory={urlHistory}
         onSelectHistory={(url) => setUrlInput(url)}
       />
@@ -366,6 +369,7 @@ export default function ScraperTool() {
       </div>
 
       {/* Modals */}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {showSettings && (
         <SettingsModal
           settings={settings}

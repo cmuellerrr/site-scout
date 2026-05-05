@@ -1,4 +1,4 @@
-import { Settings, Globe, Clock } from 'lucide-react';
+import { Settings, Globe, Clock, Info } from 'lucide-react';
 import { useState } from 'react';
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   onScan: () => void;
   scanning: boolean;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
   urlHistory: string[];
   onSelectHistory: (url: string) => void;
 }
@@ -18,7 +19,7 @@ function isValidUrl(val: string): boolean {
   return v.includes('.');
 }
 
-export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpenSettings, urlHistory, onSelectHistory }: Props) {
+export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpenSettings, onOpenHelp, urlHistory, onSelectHistory }: Props) {
   const [focused, setFocused] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const invalid = urlInput.length > 0 && !isValidUrl(urlInput);
@@ -141,6 +142,28 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
       </button>
 
       <div style={{ width: 1, height: 20, backgroundColor: '#3c3c3c' }} />
+
+      {/* Help */}
+      <button
+        onClick={onOpenHelp}
+        title="About Site Scout"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 28, height: 28, border: '1px solid #3c3c3c', borderRadius: 2,
+          backgroundColor: 'transparent', color: '#9e9e9e', cursor: 'pointer',
+          transition: 'all 0.1s',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
+        }}
+      >
+        <Info size={14} />
+      </button>
 
       {/* Settings */}
       <button
