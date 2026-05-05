@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "if [ \"$RENDER\" = \"true\" ]; then npx puppeteer browsers install chrome; fi",
     "predev": "lsof -ti :3001 | xargs kill -9 2>/dev/null; true",
     "dev": "concurrently -n server,vite -c cyan,yellow \"tsx watch server/index.ts\" \"vite\"",
     "start": "tsx server/index.ts",
