@@ -1,8 +1,10 @@
 {
   "name": "scout",
+  "productName": "Site Scout",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "predev": "lsof -ti :3001 | xargs kill -9 2>/dev/null; true",
     "dev": "concurrently -n server,vite -c cyan,yellow \"tsx watch server/index.ts\" \"vite\"",
@@ -11,7 +13,11 @@
     "preview": "vite preview",
     "server": "tsx server/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=cjs --outfile=electron/server.cjs --external:puppeteer --external:fsevents",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:fsevents",
+    "electron:dev": "concurrently -n server,vite,electron -c cyan,yellow,blue \"tsx watch server/index.ts\" \"vite\" \"wait-on http://localhost:3001/api/health http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && npm run build:server && npm run build:electron && electron-builder"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.7.0",
@@ -36,11 +42,64 @@
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/wait-on": "^5.3.4",
     "concurrently": "^9.0.1",
+    "electron": "^42.0.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.25.12",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.17.0",
     "typescript": "^5.5.3",
     "vite": "^5.4.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "wait-on": "^9.0.5"
+  },
+  "build": {
+    "appId": "com.scout.app",
+    "productName": "Scout",
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraFiles": [],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/puppeteer/**",
+      "**/node_modules/@puppeteer/**"
+    ]
   }
 }

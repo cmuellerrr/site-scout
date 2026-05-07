@@ -19,6 +19,14 @@ function isValidUrl(val: string): boolean {
   return v.includes('.');
 }
 
+// On macOS in Electron the traffic-light buttons (⬤⬤⬤) overlap the web
+// content when titleBarStyle is 'hiddenInset'. Detect this at runtime so we
+// can shift the toolbar content right and mark the bar as a drag region.
+const isElectronMac =
+  typeof navigator !== 'undefined' &&
+  /Electron/.test(navigator.userAgent) &&
+  /Mac OS X/.test(navigator.userAgent);
+
 export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpenSettings, onOpenHelp, urlHistory, onSelectHistory }: Props) {
   const [focused, setFocused] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -31,11 +39,15 @@ export default function Toolbar({ urlInput, onUrlChange, onScan, scanning, onOpe
   }
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px',
-      height: 44, backgroundColor: '#2d2d2d', borderBottom: '1px solid #3c3c3c',
-      flexShrink: 0,
-    }}>
+    <div
+      className={isElectronMac ? 'electron-drag-region' : undefined}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        paddingLeft: isElectronMac ? 80 : 12, paddingRight: 12,
+        height: 44, backgroundColor: '#2d2d2d', borderBottom: '1px solid #3c3c3c',
+        flexShrink: 0,
+      }}
+    >
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 }}>
         <Globe size={16} color="#569cd6" />

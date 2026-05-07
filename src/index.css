@@ -56,6 +56,20 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Electron window drag region — applied to the toolbar when running on macOS */
+.electron-drag-region {
+  -webkit-app-region: drag;
+}
+/* Interactive children must opt out so clicks still work */
+.electron-drag-region button,
+.electron-drag-region input,
+.electron-drag-region a,
+.electron-drag-region select,
+.electron-drag-region label,
+.electron-drag-region [role="button"] {
+  -webkit-app-region: no-drag;
+}
+
 /* Scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: #1e1e1e; }

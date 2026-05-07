@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Search, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, X } from 'lucide-react';
 import type { SitemapNode } from '../types';
 import { areAllChildrenSelected, countRealDescendants, flattenTree } from '../utils/treeUtils';
 
@@ -35,7 +35,6 @@ export default function TreeView({
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; url: string } | null>(null);
   const [filterText, setFilterText] = useState('');
-  const [showFilter, setShowFilter] = useState(false);
   const filterInputRef = useRef<HTMLInputElement>(null);
 
   const toggleExpand = useCallback((path: string) => {
@@ -61,13 +60,6 @@ export default function TreeView({
   const collapseAll = useCallback(() => {
     setExpanded(new Set(['/']));
   }, []);
-
-  // Focus filter input when showFilter becomes true
-  useEffect(() => {
-    if (showFilter) {
-      filterInputRef.current?.focus();
-    }
-  }, [showFilter]);
 
   const flatRows = useMemo(() => flattenTree(nodes, expanded), [nodes, expanded]);
 
@@ -154,79 +146,40 @@ export default function TreeView({
         <div style={{ width: 1, height: 14, backgroundColor: '#3c3c3c' }} />
         <HeaderButton onClick={expandAll} title="Expand all">+</HeaderButton>
         <HeaderButton onClick={collapseAll} title="Collapse all">−</HeaderButton>
-        <button
-          onClick={() => {
-            if (showFilter) {
-              setShowFilter(false);
-              setFilterText('');
-            } else {
-              setShowFilter(true);
-            }
-          }}
-          title="Filter paths"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontFamily: 'inherit', lineHeight: 1,
-            padding: '3px 6px', border: '1px solid #3c3c3c', borderRadius: 2,
-            backgroundColor: 'transparent',
-            color: showFilter || filterText ? '#569cd6' : '#9e9e9e',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={(e) => {
-            if (!showFilter && !filterText) {
-              (e.currentTarget as HTMLButtonElement).style.color = '#cccccc';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = '#555';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!showFilter && !filterText) {
-              (e.currentTarget as HTMLButtonElement).style.color = '#9e9e9e';
-              (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c';
-            }
-          }}
-        >
-          <Search size={11} />
-        </button>
       </div>
 
-      {/* Filter bar */}
-      {showFilter && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px',
-          height: 28, backgroundColor: '#1e1e1e', borderBottom: '1px solid #3c3c3c',
-          flexShrink: 0,
-        }}>
-          <input
-            ref={filterInputRef}
-            type="text"
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setFilterText('');
-                setShowFilter(false);
-              }
-            }}
-            placeholder="Filter paths…"
+      {/* Filter bar — always visible, matches PreviewPane URL label height */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '2px 10px',
+        backgroundColor: '#1e1e1e', borderBottom: '1px solid #2d2d2d',
+        flexShrink: 0,
+      }}>
+        <input
+          ref={filterInputRef}
+          type="text"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setFilterText(''); }}
+          placeholder="Filter paths…"
+          style={{
+            flex: 1, border: 'none', backgroundColor: 'transparent',
+            fontSize: 11, color: filterText ? '#cccccc' : '#6b6b6b', outline: 'none',
+          }}
+        />
+        {filterText && (
+          <button
+            onClick={() => setFilterText('')}
             style={{
-              flex: 1, border: 'none', backgroundColor: 'transparent',
-              fontSize: 12, color: '#cccccc', outline: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'none', border: 'none', padding: 0,
+              cursor: 'pointer', color: '#6b6b6b',
             }}
-          />
-          {filterText && (
-            <button
-              onClick={() => setFilterText('')}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'none', border: 'none', padding: 0,
-                cursor: 'pointer', color: '#6b6b6b',
-              }}
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-      )}
+          >
+            <X size={11} />
+          </button>
+        )}
+      </div>
 
       {/* Tree rows */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>

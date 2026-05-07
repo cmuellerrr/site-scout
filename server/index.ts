@@ -157,6 +157,9 @@ app.get('/api/screenshot', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /api/health ───────────────────────────────────────────────────────────
+app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
+
 // ── Serve frontend (production build) ────────────────────────────────────────
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
