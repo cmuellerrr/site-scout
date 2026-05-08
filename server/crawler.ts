@@ -391,25 +391,39 @@ export class Crawler extends EventEmitter {
   private async preflight(url: string): Promise<void> {
     try {
       const res = await fetchWithTimeout(url, 15000);
-      if (res.status === 404) throw new CrawlError('unreachable_404', `404 Not Found: ${url}`);
-      if (res.status === 403 || res.status === 429) {
-        throw new CrawlError('blocked_http', `HTTP ${res.status}: Access denied by server`);
+      this.log('info', `Pre-flight: HTTP ${res.status} from ${url}`);
+      if (res.status === 404) {
+        this.log('warn', 'Pre-flight failed: page not found (404)');
+        throw new CrawlError('unreachable_404', `404 Not Found: ${url}`);
+      }
+      if (res.status === 403) {
+        this.log('warn', 'Pre-flight failed: server returned 403 Forbidden — bot protection or IP block is active');
+        throw new CrawlError('blocked_http', `HTTP 403: Access denied by server`);
+      }
+      if (res.status === 429) {
+        this.log('warn', 'Pre-flight failed: server returned 429 Too Many Requests — rate limited');
+        throw new CrawlError('blocked_http', `HTTP 429: Rate limited by server`);
       }
       if (res.status >= 500) {
+        this.log('warn', `Pre-flight failed: server error (${res.status})`);
         throw new CrawlError('unreachable_timeout', `Server error: HTTP ${res.status}`);
       }
     } catch (e: any) {
       if (e instanceof CrawlError) throw e;
       const msg = e.message || '';
       if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+        this.log('warn', `Pre-flight failed: DNS lookup failed — "${new URL(url).hostname}" does not resolve`);
         throw new CrawlError('unreachable_dns', `DNS lookup failed: ${url}`);
       }
       if (msg.includes('ECONNREFUSED')) {
+        this.log('warn', 'Pre-flight failed: connection refused — server may be down or blocking this IP');
         throw new CrawlError('unreachable_refused', `Connection refused: ${url}`);
       }
       if (msg.includes('abort') || msg.includes('timeout') || msg.includes('TimeoutError')) {
+        this.log('warn', 'Pre-flight failed: request timed out after 15s — server is unresponsive');
         throw new CrawlError('unreachable_timeout', `Request timed out: ${url}`);
       }
+      this.log('warn', `Pre-flight failed: ${msg}`);
       throw new CrawlError('unreachable_timeout', `Pre-flight failed: ${msg}`);
     }
   }

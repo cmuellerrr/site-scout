@@ -273,12 +273,15 @@ export default function ScraperTool() {
         )}
 
         {scanState === 'warning' && crawlError && (
-          <ScanWarningState
-            code={crawlError.code}
-            message={crawlError.message}
-            onBack={handleBack}
-            onRetry={handleRetry}
-          />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ScanWarningState
+              code={crawlError.code}
+              message={crawlError.message}
+              onBack={handleBack}
+              onRetry={handleRetry}
+            />
+            <LogPanel logs={logs} open={logOpen} onToggle={() => setLogOpen((p) => !p)} />
+          </div>
         )}
 
         {scanState === 'done' && (
