@@ -56,7 +56,10 @@
   },
   "build": {
     "appId": "com.scout.app",
-    "productName": "Scout",
+    "productName": "Site Scout",
+    "directories": {
+      "output": "dist-electron"
+    },
     "files": [
       "electron/**/*",
       "dist/**/*",
