@@ -234,12 +234,18 @@ export class Crawler extends EventEmitter {
 
     // ── Pre-flight ───────────────────────────────────────────────────────
     this.log('info', 'Pre-flight check...');
-    await this.preflight(rootUrl);
+    const effectiveRootUrl = await this.preflight(rootUrl);
     this.log('info', 'Pre-flight passed');
+
+    // Use the effective URL (may differ if www was auto-toggled)
+    const finalRootUrl = effectiveRootUrl;
+    const finalRootDomain = getRootDomain(new URL(finalRootUrl).hostname);
+    const finalRootPathRaw = new URL(finalRootUrl).pathname.replace(/\/$/, '') || '/';
+    const finalRootPathPrefix = finalRootPathRaw === '/' ? null : finalRootPathRaw;
 
     // urlSet: normalized URL string -> original URL string (or null for synthetic)
     const urlSet = new Map<string, string | null>();
-    urlSet.set(normalizeUrl(rootUrl), rootUrl);
+    urlSet.set(normalizeUrl(finalRootUrl), finalRootUrl);
     let urlsCapped = false;
 
     // ── Phase 1: Sitemap ─────────────────────────────────────────────────
@@ -247,7 +253,7 @@ export class Crawler extends EventEmitter {
     let sitemapYieldedResults = false;
 
     try {
-      const sitemapFiles = await discoverSitemaps(rootUrl);
+      const sitemapFiles = await discoverSitemaps(finalRootUrl);
 
       if (sitemapFiles.length > 0) {
         // Prioritize root-level sitemaps (single path segment) before deep/specialized ones
@@ -258,7 +264,7 @@ export class Crawler extends EventEmitter {
           ...sitemapFiles.filter(u => !isRootLevel(u)),
         ];
         this.log('info', `Found ${sorted.length} sitemap file(s): ${sorted.map(u => new URL(u).pathname).join(', ')}`);
-        const sitemapEntries = await getSitemapUrls(sorted, rootDomain, rootPathPrefix);
+        const sitemapEntries = await getSitemapUrls(sorted, finalRootDomain, finalRootPathPrefix);
 
         let added = 0;
         for (const { url } of sitemapEntries) {
@@ -301,9 +307,9 @@ export class Crawler extends EventEmitter {
     // (visited only covers processed URLs; without queued, pages linked from N sources
     // get added N times and waste batch slots on early-return no-ops.)
     const queued = new Set<string>();
-    const normRoot = normalizeUrl(rootUrl);
+    const normRoot = normalizeUrl(finalRootUrl);
     queued.add(normRoot);
-    const queue: Array<{ url: string; hop: number }> = [{ url: rootUrl, hop: 0 }];
+    const queue: Array<{ url: string; hop: number }> = [{ url: finalRootUrl, hop: 0 }];
     let crawledCount = 0;
 
     while (queue.length > 0 && urlSet.size < MAX_TOTAL_URLS) {
@@ -337,15 +343,15 @@ export class Crawler extends EventEmitter {
             return;
           }
 
-          const links = extractLinks(html, finalUrl, rootDomain);
+          const links = extractLinks(html, finalUrl, finalRootDomain);
           let newCount = 0;
 
           for (const link of links) {
             const linkPath = new URL(link).pathname.replace(/\/$/, '');
 
             // Sub-path scope check
-            if (rootPathPrefix) {
-              if (linkPath !== rootPathPrefix && !linkPath.startsWith(rootPathPrefix + '/')) continue;
+            if (finalRootPathPrefix) {
+              if (linkPath !== finalRootPathPrefix && !linkPath.startsWith(finalRootPathPrefix + '/')) continue;
             }
 
             // Exclusion check
@@ -360,7 +366,7 @@ export class Crawler extends EventEmitter {
               }
             }
             if (!queued.has(link) && hop < bfsMaxDepth) {
-              if (getPathDepth(new URL(link).pathname) <= depth + (rootPathPrefix ? new URL(rootUrl).pathname.split('/').filter(Boolean).length : 0)) {
+              if (getPathDepth(new URL(link).pathname) <= depth + (finalRootPathPrefix ? new URL(finalRootUrl).pathname.split('/').filter(Boolean).length : 0)) {
                 queued.add(link);
                 queue.push({ url: link, hop: hop + 1 });
               }
@@ -383,31 +389,52 @@ export class Crawler extends EventEmitter {
       throw new CrawlError('blocked_empty', 'No URLs discovered. The site may block crawlers or serve content via JavaScript only.');
     }
 
-    const tree = buildTree(urlSet, rootUrl);
+    const tree = buildTree(urlSet, finalRootUrl);
     this.log('info', `Tree built successfully${urlsCapped ? ` (capped at ${MAX_TOTAL_URLS} URLs)` : ''}`);
     return { tree, urlsCapped };
   }
 
-  private async preflight(url: string): Promise<void> {
+  private async preflight(url: string): Promise<string> {
+    const attempt = async (targetUrl: string): Promise<number> => {
+      const res = await fetchWithTimeout(targetUrl, 15000);
+      this.log('info', `Pre-flight: HTTP ${res.status} from ${targetUrl}`);
+      return res.status;
+    };
+
     try {
-      const res = await fetchWithTimeout(url, 15000);
-      this.log('info', `Pre-flight: HTTP ${res.status} from ${url}`);
-      if (res.status === 404) {
+      const status = await attempt(url);
+
+      // On 404, try toggling www prefix before giving up
+      if (status === 404) {
+        const u = new URL(url);
+        const altHostname = u.hostname.startsWith('www.')
+          ? u.hostname.slice(4)
+          : `www.${u.hostname}`;
+        const altUrl = url.replace(u.hostname, altHostname);
+        this.log('info', `Pre-flight: 404 on ${u.hostname} — retrying with ${altHostname}`);
+        try {
+          const altStatus = await attempt(altUrl);
+          if (altStatus < 400) {
+            this.log('info', `Pre-flight: ${altHostname} responded ${altStatus} — using that instead`);
+            return altUrl;
+          }
+        } catch { /* fall through to original error */ }
         this.log('warn', 'Pre-flight failed: page not found (404)');
         throw new CrawlError('unreachable_404', `404 Not Found: ${url}`);
       }
-      if (res.status === 403) {
+      if (status === 403) {
         this.log('warn', 'Pre-flight failed: server returned 403 Forbidden — bot protection or IP block is active');
         throw new CrawlError('blocked_http', `HTTP 403: Access denied by server`);
       }
-      if (res.status === 429) {
+      if (status === 429) {
         this.log('warn', 'Pre-flight failed: server returned 429 Too Many Requests — rate limited');
         throw new CrawlError('blocked_http', `HTTP 429: Rate limited by server`);
       }
-      if (res.status >= 500) {
-        this.log('warn', `Pre-flight failed: server error (${res.status})`);
-        throw new CrawlError('unreachable_timeout', `Server error: HTTP ${res.status}`);
+      if (status >= 500) {
+        this.log('warn', `Pre-flight failed: server error (${status})`);
+        throw new CrawlError('unreachable_timeout', `Server error: HTTP ${status}`);
       }
+      return url;
     } catch (e: any) {
       if (e instanceof CrawlError) throw e;
       const msg = e.message || '';
