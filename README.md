@@ -28,11 +28,11 @@ Download and run the macOS installer from [nodejs.org](https://nodejs.org) (choo
 
 If you have git installed:
 ```bash
-git clone https://github.com/cmuellerrr/scout.git
-cd scout
+git clone https://github.com/cmuellerrr/site-scout.git
+cd site-scout
 ```
 
-Or click **Code → Download ZIP** on the GitHub page, unzip it, and open Terminal in that folder.
+If you don't have git, install it from [git-scm.com](https://git-scm.com/download/mac), or click **Code → Download ZIP** on the GitHub page, unzip it, and open Terminal in that folder.
 
 **3. Install dependencies**
 
