@@ -43,8 +43,11 @@ export default function UrlListModal({ nodes, rootUrl, onClose }: Props) {
   }
 
   return (
-    <Modal title="Selected URLs" onClose={onClose} width={560}>
+    <Modal title="Selected URLs" onClose={onClose} width={Math.min(window.innerWidth - 32, 900)}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        <button onClick={handleDownload} style={btnStyle(true)}>
+          <Download size={12} /> Download .txt
+        </button>
         <button
           onClick={handleCopy}
           style={btnStyle(false)}
@@ -52,14 +55,11 @@ export default function UrlListModal({ nodes, rootUrl, onClose }: Props) {
           {copied ? <Check size={12} /> : <Copy size={12} />}
           {copied ? 'Copied!' : 'Copy to clipboard'}
         </button>
-        <button onClick={handleDownload} style={btnStyle(true)}>
-          <Download size={12} /> Download .txt
-        </button>
       </div>
 
       <div style={{
         border: '1px solid #3c3c3c', borderRadius: 2,
-        backgroundColor: '#1e1e1e', maxHeight: 360, overflowY: 'auto',
+        backgroundColor: '#1e1e1e', maxHeight: 520, overflowY: 'auto',
         padding: '8px 0',
       }}>
         {urls.map((url, i) => (

@@ -1,5 +1,5 @@
 import { useRef, useMemo } from 'react';
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { toPng } from 'html-to-image';
 import { Download, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Modal } from './UrlListModal';
@@ -106,6 +106,7 @@ function DiagramNode({ node, depth }: TreeNodeProps) {
 
 export default function VisualSitemapModal({ nodes, selectedPaths, rootUrl, onClose }: Props) {
   const diagramRef = useRef<HTMLDivElement>(null);
+  const transformRef = useRef<ReactZoomPanPinchRef>(null);
 
   const filteredNodes = useMemo(() => {
     return nodes.map((n) => filterToSelected(n, selectedPaths)).filter(Boolean) as SitemapNode[];
@@ -126,7 +127,7 @@ export default function VisualSitemapModal({ nodes, selectedPaths, rootUrl, onCl
     <Modal title="Site Diagram" onClose={onClose} width={Math.min(window.innerWidth - 32, 900)}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Controls */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 6 }}>
           <button onClick={handleExport} style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px',
             fontSize: 11, fontFamily: 'inherit', border: '1px solid #569cd6', borderRadius: 2,
@@ -141,52 +142,46 @@ export default function VisualSitemapModal({ nodes, selectedPaths, rootUrl, onCl
           border: '1px solid #3c3c3c', borderRadius: 2, backgroundColor: '#1e1e1e',
           overflow: 'hidden', height: 480,
         }}>
-          <TransformWrapper minScale={0.2} maxScale={3} initialScale={0.8} centerOnInit>
-            {({ zoomIn, zoomOut, resetTransform }) => (
-              <>
-                {/* Zoom controls */}
-                <div style={{
-                  position: 'absolute', zIndex: 10, top: 8, right: 8,
-                  display: 'flex', gap: 4,
-                }}>
-                  {[
-                    { icon: <ZoomIn size={12} />, fn: () => zoomIn() },
-                    { icon: <ZoomOut size={12} />, fn: () => zoomOut() },
-                    { icon: <Maximize size={12} />, fn: () => resetTransform() },
-                  ].map((ctrl, i) => (
-                    <button key={i} onClick={ctrl.fn} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: 24, height: 24, border: '1px solid #3c3c3c', borderRadius: 2,
-                      backgroundColor: '#252526', color: '#9e9e9e', cursor: 'pointer',
-                    }}>
-                      {ctrl.icon}
-                    </button>
-                  ))}
-                </div>
-
-                <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
-                  <div
-                    ref={diagramRef}
-                    style={{ padding: 32, display: 'inline-flex', alignItems: 'flex-start' }}
-                  >
-                    {filteredNodes.length === 0 ? (
-                      <div style={{ color: '#6b6b6b', fontSize: 12 }}>No selected URLs to display.</div>
-                    ) : (
-                      filteredNodes.map((node) => (
-                        <div key={node.path} style={{ padding: '0 16px' }}>
-                          <DiagramNode node={node} depth={0} />
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </TransformComponent>
-              </>
-            )}
+          <TransformWrapper ref={transformRef} minScale={0.2} maxScale={3} initialScale={0.8} centerOnInit>
+            <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+              <div
+                ref={diagramRef}
+                style={{ padding: 32, display: 'inline-flex', alignItems: 'flex-start' }}
+              >
+                {filteredNodes.length === 0 ? (
+                  <div style={{ color: '#6b6b6b', fontSize: 12 }}>No selected URLs to display.</div>
+                ) : (
+                  filteredNodes.map((node) => (
+                    <div key={node.path} style={{ padding: '0 16px' }}>
+                      <DiagramNode node={node} depth={0} />
+                    </div>
+                  ))
+                )}
+              </div>
+            </TransformComponent>
           </TransformWrapper>
         </div>
 
-        <div style={{ fontSize: 11, color: '#555', textAlign: 'right' }}>
-          Showing {selectedPaths.size} selected URLs · Scroll to zoom · Drag to pan
+        {/* Footer: zoom buttons + hint */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[
+              { icon: <ZoomOut size={12} />, fn: () => transformRef.current?.zoomOut(), title: 'Zoom out' },
+              { icon: <ZoomIn size={12} />, fn: () => transformRef.current?.zoomIn(), title: 'Zoom in' },
+              { icon: <Maximize size={12} />, fn: () => transformRef.current?.resetTransform(), title: 'Reset zoom' },
+            ].map((ctrl, i) => (
+              <button key={i} onClick={ctrl.fn} title={ctrl.title} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 24, height: 24, border: '1px solid #3c3c3c', borderRadius: 2,
+                backgroundColor: '#252526', color: '#9e9e9e', cursor: 'pointer',
+              }}>
+                {ctrl.icon}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: 11, color: '#555' }}>
+            Showing {selectedPaths.size} selected URLs · Scroll to zoom · Drag to pan
+          </span>
         </div>
       </div>
     </Modal>
