@@ -50,6 +50,7 @@ export default function ScraperTool() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [crawlError, setCrawlError] = useState<{ code: CrawlErrorCode; message: string } | null>(null);
   const [urlsCapped, setUrlsCapped] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
 
   // Preview
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -117,6 +118,7 @@ export default function ScraperTool() {
     setScanProgress({ phase: '', crawled: 0, total: 0, found: 0 });
     setCrawlError(null);
     setUrlsCapped(false);
+    setRateLimited(false);
 
     // Clear frameable cache for this hostname
     try {
@@ -148,6 +150,7 @@ export default function ScraperTool() {
           case 'complete': {
             const tree: SitemapNode[] = event.data;
             setUrlsCapped(event.urlsCapped ?? false);
+            setRateLimited(event.rateLimited ?? false);
             setSitemapData(tree);
             // Select all real URLs by default
             const allPaths = new Set(collectRealNodes(tree).map((n) => n.path));
@@ -293,6 +296,15 @@ export default function ScraperTool() {
                 display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
               }}>
                 ⚠ Result capped at 15,000 URLs — some sections may be truncated
+              </div>
+            )}
+            {rateLimited && (
+              <div style={{
+                padding: '4px 12px', fontSize: 11, backgroundColor: '#2d2008',
+                borderBottom: '1px solid #6b4c00', color: '#cca700',
+                display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              }}>
+                ⚠ Some pages were rate-limited during crawl — results may be incomplete
               </div>
             )}
             {/* Split pane */}

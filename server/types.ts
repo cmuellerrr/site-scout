@@ -27,5 +27,5 @@ export interface CrawlError {
 export type SSEEvent =
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string; timestamp: number }
   | { type: 'progress'; phase: 'sitemap' | 'bfs'; crawled: number; total: number; found: number }
-  | { type: 'complete'; data: SitemapNode[]; logs: LogEntry[]; urlsCapped: boolean }
+  | { type: 'complete'; data: SitemapNode[]; logs: LogEntry[]; urlsCapped: boolean; rateLimited: boolean }
   | { type: 'error'; crawlError: CrawlErrorCode; message: string; logs: LogEntry[] };

@@ -5,7 +5,7 @@ import { discoverSitemaps, getSitemapUrls } from './sitemap.js';
 
 const REQUEST_TIMEOUT = 12000;
 const MAX_TOTAL_URLS = 15000;
-const BFS_CONCURRENCY = 5;
+const BFS_CONCURRENCY = 8;
 
 const SKIP_EXTENSIONS =
   /\.(jpg|jpeg|png|gif|svg|webp|ico|bmp|tiff|pdf|zip|tar|gz|7z|rar|mp4|mp3|wav|ogg|woff|woff2|ttf|eot|otf|css|js|mjs|ts|json|xml|txt|csv|xlsx|docx|pptx|ppt|xls|dmg|exe|pkg|deb|rpm)(\?.*)?$/i;
@@ -311,6 +311,7 @@ export class Crawler extends EventEmitter {
     queued.add(normRoot);
     const queue: Array<{ url: string; hop: number }> = [{ url: finalRootUrl, hop: 0 }];
     let crawledCount = 0;
+    let rateLimited = false;
 
     while (queue.length > 0 && urlSet.size < MAX_TOTAL_URLS) {
       // Pull a batch
@@ -332,6 +333,11 @@ export class Crawler extends EventEmitter {
           try {
             const res = await fetchWithTimeout(url);
             finalUrl = res.url; // after redirects
+            if (res.status === 429) {
+              this.log('warn', `[BFS] Rate limited (429): ${url}`);
+              rateLimited = true;
+              return;
+            }
             const ct = res.headers.get('content-type') || '';
             if (!ct.includes('text/html')) {
               this.log('info', `[BFS] Skipping non-HTML: ${url}`);
@@ -391,7 +397,7 @@ export class Crawler extends EventEmitter {
 
     const tree = buildTree(urlSet, finalRootUrl);
     this.log('info', `Tree built successfully${urlsCapped ? ` (capped at ${MAX_TOTAL_URLS} URLs)` : ''}`);
-    return { tree, urlsCapped };
+    return { tree, urlsCapped, rateLimited };
   }
 
   private async preflight(url: string): Promise<string> {

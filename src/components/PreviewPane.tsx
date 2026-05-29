@@ -42,7 +42,7 @@ export default function PreviewPane({ url, frameableStatus, blockPopups, onToggl
   // 10-second stuck detection after frameable confirmed
   useEffect(() => {
     if (frameableStatus === 'yes' && !iframeLoaded) {
-      stuckTimerRef.current = setTimeout(() => setIframeStuck(true), 10000);
+      stuckTimerRef.current = setTimeout(() => setIframeStuck(true), 20000);
     }
     return () => {
       if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);

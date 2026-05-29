@@ -58,8 +58,8 @@ app.get('/api/crawl', async (req: Request, res: Response) => {
   });
 
   try {
-    const { tree, urlsCapped } = await crawler.crawl(url, depth, crawlOptions);
-    sseWrite(res, { type: 'complete', data: tree, logs: crawler.getLogs(), urlsCapped });
+    const { tree, urlsCapped, rateLimited } = await crawler.crawl(url, depth, crawlOptions);
+    sseWrite(res, { type: 'complete', data: tree, logs: crawler.getLogs(), urlsCapped, rateLimited });
   } catch (e: any) {
     if (e instanceof CrawlError) {
       sseWrite(res, {
